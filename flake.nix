@@ -58,6 +58,7 @@
           nativeBuildInputs = with pkgs; [
             pkg-config
             makeWrapper
+            copyDesktopItems
           ];
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
@@ -69,14 +70,29 @@
           };
 
           ratty = craneLib.buildPackage {
+            src = lib.cleanSource ./.;
             inherit
-              src
               cargoArtifacts
               buildInputs
               nativeBuildInputs
               ;
+
+            desktopItems = [
+              (pkgs.makeDesktopItem {
+                name = "ratty";
+                desktopName = "Ratty";
+                comment = "A GPU-rendered terminal emulator with inline 3D graphics";
+                exec = "ratty";
+                terminal = false;
+                categories = [ "System" "TerminalEmulator" "Utility" ];
+                icon = "ratty";
+              })
+            ];
+
             doCheck = false;
             postInstall = pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+              install -Dm644 ${./website/assets/images/ratty-logo.png} $out/share/icons/hicolor/512x512/apps/ratty.png
+
               wrapProgram $out/bin/ratty \
                 --prefix LD_LIBRARY_PATH : ${LD_LIBRARY_PATH}
             '';
@@ -199,11 +215,16 @@
                   if cfg.settings == { } then
                     cfg.package
                   else
-                    pkgs.runCommand "ratty-system-wrapped" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
-                      mkdir -p $out/bin
-                      makeWrapper ${cfg.package}/bin/ratty $out/bin/ratty \
-                        --add-flags "--config-file /etc/ratty/ratty.toml"
-                    ''
+                    pkgs.symlinkJoin {
+                      name = "ratty-system-wrapped";
+                      paths = [ cfg.package ];
+                      nativeBuildInputs = [ pkgs.makeWrapper ];
+                      postBuild = ''
+                        rm $out/bin/ratty
+                        makeWrapper ${cfg.package}/bin/ratty $out/bin/ratty \
+                          --add-flags "--config-file /etc/ratty/ratty.toml"
+                      '';
+                    }
                 )
               ];
 
